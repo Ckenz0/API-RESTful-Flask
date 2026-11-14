@@ -2,7 +2,7 @@
 
 API de mensagens feita com Python 3.12 e Flask. Permite criar, listar, consultar, atualizar e excluir mensagens, com respostas em JSON.
 
-[API no Azure](https://api-restful-flask-akd2cqdwgcakefgk.brazilsouth-01.azurewebsites.net/) · [Coleção do Postman](postman/messages-api.postman_collection.json)
+[API no Azure](https://api-restful-flask-akd2cqdwgcakefgk.brazilsouth-01.azurewebsites.net/) · [Coleção do Postman](https://www.postman.com/workspace/API-RESTful-Flask~cd76287b-4576-45d8-b167-affab020b835/collection/53711331-bcb0ae85-4656-484e-b9e3-4d00c2e11083)
 
 ## Executar
 
@@ -39,7 +39,7 @@ As mensagens ficam em memória e são apagadas quando a aplicação reinicia.
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-No Postman, importe a [coleção](https://raw.githubusercontent.com/Ckenz0/API-RESTful-Flask/main/postman/messages-api.postman_collection.json) e use **Run collection** para executar as requisições na ordem. A variável `baseUrl` já aponta para o Azure; para testar localmente, troque por `http://127.0.0.1:5000`.
+No Postman, abra a [coleção](https://www.postman.com/workspace/API-RESTful-Flask~cd76287b-4576-45d8-b167-affab020b835/collection/53711331-bcb0ae85-4656-484e-b9e3-4d00c2e11083) e use **Run collection** para executar as requisições na ordem. A variável `baseUrl` já aponta para o Azure; para testar localmente, troque por `http://127.0.0.1:5000`. O arquivo JSON também está na pasta `postman`.
 
 ## Deploy
 
