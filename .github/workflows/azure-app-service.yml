@@ -80,7 +80,6 @@ jobs:
       cancel-in-progress: false
     env:
       AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
-      AZURE_CORE_OUTPUT: none
     steps:
       - name: Validar configuracao
         env:
