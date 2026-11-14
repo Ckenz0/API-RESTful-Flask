@@ -6,6 +6,7 @@ Autor: **Cauê Kenzo Adaniya**.
 
 ## Código e coleção
 
+- [API publicada no Azure](https://api-restful-flask-akd2cqdwgcakefgk.brazilsouth-01.azurewebsites.net/)
 - [Repositório](https://github.com/Ckenz0/API-RESTful-Flask)
 - [Código da API](https://github.com/Ckenz0/API-RESTful-Flask/blob/main/app.py)
 - [Coleção do Postman](https://github.com/Ckenz0/API-RESTful-Flask/blob/main/postman/messages-api.postman_collection.json)
@@ -57,9 +58,9 @@ As mensagens ficam em memória. Cada inicialização começa com `{"id": 1, "tex
 
 1. Abra o Postman e clique em **Import**.
 2. Selecione `postman/messages-api.postman_collection.json` ou cole o link do JSON disponível acima.
-3. Abra a coleção **Messages API** e configure a variável `baseUrl`:
+3. Abra a coleção **Messages API** e confira a variável `baseUrl`, que já aponta para a API no Azure:
    - Local: `http://127.0.0.1:5000`.
-   - Azure: a URL HTTPS do **Domínio padrão** do App Service, sem barra no final.
+   - Azure: `https://api-restful-flask-akd2cqdwgcakefgk.brazilsouth-01.azurewebsites.net`.
 4. Salve a variável, clique em **Run collection** e execute as 11 requisições na ordem numerada, com uma iteração.
 5. Confira o resultado: **23 verificações aprovadas**. As respostas 400, 404 e 415 são casos de erro esperados e fazem parte dos testes.
 
@@ -78,35 +79,32 @@ Os 11 testes cobrem o contrato HTTP, operações sobre mensagens, validações, 
 Com Node.js instalado e a API local em execução, também é possível executar a coleção do Postman com Newman:
 
 ```powershell
-npx --yes newman@6.2.3 run postman/messages-api.postman_collection.json
+npx --yes newman@6.2.3 run postman/messages-api.postman_collection.json --env-var "baseUrl=http://127.0.0.1:5000"
 ```
 
-Para apontar a coleção a outro endereço:
+Para executar a coleção no Azure, use o endereço padrão salvo no arquivo:
 
 ```powershell
-npx --yes newman@6.2.3 run postman/messages-api.postman_collection.json --env-var "baseUrl=https://DOMINIO-DO-APP-SERVICE"
+npx --yes newman@6.2.3 run postman/messages-api.postman_collection.json
 ```
 
 ## Deploy automático no Azure
 
 Use um App Service com publicação de **Código**, sistema **Linux**, runtime **Python 3.12** e plano **Free F1**.
 
-No App Service, configure:
+O App Service **API-RESTful-Flask** está conectado a este repositório pela Central de Implantação do Azure. A autenticação do workflow usa OpenID Connect (OIDC), com os identificadores cadastrados pelo Azure nos secrets do repositório.
 
-| Local | Configuração | Valor |
-| --- | --- | --- |
-| Configuration → Stack settings | Startup command | `sh startup.sh` |
-| Environment variables → App settings | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` |
-| Configuration → General settings | SCM Basic Auth Publishing Credentials | Habilitado |
+O pipeline configura automaticamente `SCM_DO_BUILD_DURING_DEPLOYMENT=true` e o comando de inicialização `sh startup.sh` antes da publicação.
 
-Em **Overview**, baixe o perfil de publicação. No repositório **API-RESTful-Flask**, abra **Settings → Secrets and variables → Actions** e cadastre:
+Em **Settings → Secrets and variables → Actions**, a variável `AZURE_WEBAPP_NAME` contém `API-RESTful-Flask`. Os secrets utilizados pela conexão OIDC são:
 
-| Tipo | Nome | Valor |
-| --- | --- | --- |
-| Variable | `AZURE_WEBAPP_NAME` | Nome exato do App Service, sem protocolo e sem domínio |
-| Secret | `AZURE_WEBAPP_PUBLISH_PROFILE` | Conteúdo XML completo do perfil de publicação do App Service escolhido |
+| Identificador | Secret |
+| --- | --- |
+| Cliente da identidade | `AZUREAPPSERVICE_CLIENTID_249D317F020E4E53A75149FD65ED73E7` |
+| Diretório | `AZUREAPPSERVICE_TENANTID_2F9ADF9D15E9459BADCF64306BF9656F` |
+| Assinatura | `AZUREAPPSERVICE_SUBSCRIPTIONID_4E9F7C0527464F9B913CB00DCD727A79` |
 
-Secrets são configurados por repositório: um secret salvo em outro repositório não é disponibilizado automaticamente neste. Não adicione o arquivo do perfil ao Git.
+A identidade possui uma credencial federada para a branch `main` deste repositório e precisa de permissão de publicação no App Service. Se a conexão for recriada no portal, confira os nomes dos secrets gerados e atualize as referências do workflow. Valores de credenciais permanecem nos secrets.
 
 O workflow `.github/workflows/azure-app-service.yml`:
 

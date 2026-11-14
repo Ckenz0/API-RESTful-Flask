@@ -72,22 +72,28 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AZURE_WEBAPP_NAME != ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
     concurrency:
       group: azure-api-production
       cancel-in-progress: false
     env:
       AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+      AZURE_CORE_OUTPUT: none
     steps:
       - name: Validar configuracao
         env:
-          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          AZURE_CLIENT_ID: ${{ secrets.AZUREAPPSERVICE_CLIENTID_249D317F020E4E53A75149FD65ED73E7 }}
+          AZURE_TENANT_ID: ${{ secrets.AZUREAPPSERVICE_TENANTID_2F9ADF9D15E9459BADCF64306BF9656F }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_4E9F7C0527464F9B913CB00DCD727A79 }}
         run: |
           if [ -z "$AZURE_WEBAPP_NAME" ]; then
             echo '::error::Configure a variavel AZURE_WEBAPP_NAME no repositorio.'
             exit 1
           fi
-          if [ -z "$PUBLISH_PROFILE" ]; then
-            echo '::error::Configure o secret AZURE_WEBAPP_PUBLISH_PROFILE neste repositorio.'
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ] || [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo '::error::Confira as credenciais OIDC configuradas pela Central de Implantacao do Azure.'
             exit 1
           fi
 
@@ -99,13 +105,29 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Autenticar no Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_249D317F020E4E53A75149FD65ED73E7 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_2F9ADF9D15E9459BADCF64306BF9656F }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_4E9F7C0527464F9B913CB00DCD727A79 }}
+
+      - name: Habilitar instalacao de dependencias no Azure
+        run: |
+          resource_group=$(az webapp list --query "[?name=='$AZURE_WEBAPP_NAME'].resourceGroup | [0]" --output tsv)
+          if [ -z "$resource_group" ]; then
+            echo '::error::App Service nao encontrado na assinatura configurada.'
+            exit 1
+          fi
+          az webapp config appsettings set --name "$AZURE_WEBAPP_NAME" --resource-group "$resource_group" --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true --output none
+
       - name: Fazer deploy
         id: deploy
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: release.zip
+          startup-command: sh startup.sh
 
       - name: Aguardar API e executar colecao Postman
         env:
