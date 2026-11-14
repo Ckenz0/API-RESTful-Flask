@@ -1,0 +1,136 @@
+name: API Flask CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Testar API e colecao Postman
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Instalar dependencias
+        run: python -m pip install -r requirements.txt
+
+      - name: Verificar dependencias e executar testes
+        run: |
+          python -m pip check
+          python -m unittest discover -s tests -v
+
+      - name: Executar colecao Postman com Gunicorn
+        run: |
+          sh startup.sh > gunicorn.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/api/mensagens > /dev/null
+          npx --yes newman@6.2.3 run postman/messages-api.postman_collection.json --env-var baseUrl=http://127.0.0.1:8000 --reporters cli,junit --reporter-junit-export reports/postman-local.xml --timeout-request 15000
+
+      - name: Salvar resultado da colecao
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-local
+          path: reports/postman-local.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Empacotar API
+        run: python -m zipfile -c release.zip app.py requirements.txt startup.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flask-api
+          path: |
+            release.zip
+            postman/messages-api.postman_collection.json
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Publicar e testar no Azure
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AZURE_WEBAPP_NAME != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: azure-api-production
+      cancel-in-progress: false
+    env:
+      AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+    steps:
+      - name: Validar configuracao
+        env:
+          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          if [ -z "$AZURE_WEBAPP_NAME" ]; then
+            echo '::error::Configure a variavel AZURE_WEBAPP_NAME no repositorio.'
+            exit 1
+          fi
+          if [ -z "$PUBLISH_PROFILE" ]; then
+            echo '::error::Configure o secret AZURE_WEBAPP_PUBLISH_PROFILE neste repositorio.'
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: flask-api
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Fazer deploy
+        id: deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: release.zip
+
+      - name: Aguardar API e executar colecao Postman
+        env:
+          WEBAPP_URL: ${{ steps.deploy.outputs.webapp-url }}
+        run: |
+          base_url="${WEBAPP_URL%/}"
+          ready=false
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent --show-error --max-time 20 "$base_url/api/mensagens" > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+          if [ "$ready" != true ]; then
+            echo '::error::A API nao respondeu apos o deploy.'
+            exit 1
+          fi
+          npx --yes newman@6.2.3 run postman/messages-api.postman_collection.json --env-var "baseUrl=$base_url" --reporters cli,junit --reporter-junit-export reports/postman-azure.xml --timeout-request 30000
+
+      - name: Salvar resultado da colecao no Azure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-azure
+          path: reports/postman-azure.xml
+          if-no-files-found: ignore
+          retention-days: 7

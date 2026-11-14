@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API REST",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flask",
+      "env": {"FLASK_APP": "app:create_app"},
+      "args": ["run", "--no-debugger", "--no-reload", "--port", "5000"],
+      "console": "integratedTerminal",
+      "jinja": true
+    }
+  ]
+}
